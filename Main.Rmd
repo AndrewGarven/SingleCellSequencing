@@ -1,0 +1,132 @@
+---
+title: "Single Cell Sequencing Analysis"
+output: html_notebook
+---
+
+# dependancies
+
+```{r}
+library('Seurat')
+library('tidyverse')
+library('devtools')
+library('SeuratData')
+```
+
+# Data Download
+
+installing Seurat data set from publicly available source (Satija Lab)
+
+```{r}
+InstallData('pbmc3k')
+data('pbmc3k')
+```
+
+# Quality Control
+
+1. find the proportion of mitochondrial RNA within a sample 
+  -> dying cells express higher relative mitochondrial RNA
+  -> as such dying cells can be eliminated based on there MT RNA expression
+  
+2. plot a histogram of MT RNA to ensure 'normal' Guassian distribution
+
+3. plot a histogram of n_countRNA ensure 'normal' Guassian distribution
+  -> ensure there are not a lot of samples have low expression
+
+```{r}
+pbmc3k$percent.mito <- PercentageFeatureSet(pbmc3k, '^MT-')
+hist(pbmc3k$percent.mito, breaks = 100)
+hist(pbmc3k$nCount_RNA, breaks = 100)
+```
+
+# filtering & normalization 
+
+1. remove cells with 'high' mitochondrial RNA 
+  -> based on histogram above: visually 5+ is excessive
+  
+2. NormalizeData is simply a log transformation
+
+```{r}
+# mitochondrial filtering
+pbmc3k <- subset(pbmc3k, percent.mito < 5)
+
+# log-transformation normalization
+pbmc3k <- NormalizeData(pbmc3k)
+```
+
+# Feature Selection 
+
+1. evaluating the variance of each gene and selecting the top 2000 highly variable genes
+
+2. printing the most highly variable 25 genes
+
+```{r}
+pbmc3k <- FindVariableFeatures(pbmc3k)
+head(VariableFeatures(pbmc3k), 25)
+```
+
+# PCA analysis
+
+1. in order to have equally weighted genes in PCA analysis they need to be normalized and zero centered (z-score)
+
+2. run PCA analysis
+-> PC-1 is the line which provides the largest SD between the data
+
+3. Elbow plot
+-> showing the standard deviation for each PC 
+
+4. Dim Plot 
+-> regular PCA plot without highlighting a feature
+
+5. Feature Plot
+-> PCA plot with a featuer of interest highlighted
+-> ex. perhaps you want to know the T-cell population
+
+```{r}
+pbmc3k <- ScaleData(pbmc3k)
+pbmc3k <- RunPCA(pbmc3k)
+ElbowPlot(pbmc3k, ndims=20)
+DimPlot(pbmc3k)
+FeaturePlot(pbmc3k, feature='CST3')
+```
+
+# non-linear dimensional reduction
+
+UMAP is considered better than t-SNE but feel free to utilize either:
+-> here I use UMAP
+
+1. UMAP
+-> find the 'elbow' on elbow plot (in our case this is around 10)
+-> take just those 10 dimensions and reduce them into 2D space
+
+2. DimPlot
+-> simply plot the UMAP on a scatter plot
+
+3. FeaturePlot
+-> simply plot the UMAP on a scatter plot with features
+
+```{r}
+pbmc3k <- RunUMAP(pbmc3k, dims=1:10)
+DimPlot(pbmc3k)
+FeaturePlot(pbmc3k, features = 'CD3E')
+```
+
+# Clustering
+
+1. findNeighbours
+-> uses PCA plot to find Neighbours in the graph 
+
+2. FindClusters
+-> assigns clusters based on the resolutaion metric
+
+3. findMarkers 
+-> find the markers that define a cluster
+-> you can then use a FeaturePlot to highlight
+
+```{r}
+pbmc3k <- FindNeighbors(pbmc3k, dims = 1:10)
+pbmc3k <- FindClusters(pbmc3k, resolution=0.2)
+DimPlot(pbmc3k)
+cluster_0 <- FindMarkers(pbmc3k, ident.1 = 0)
+FeaturePlot(pbmc3k, feature = 'LDHB')
+```
+
